@@ -55,7 +55,7 @@ class SaveResultsCallback(DefaultCallbacks):
   def __init__(self):
     super().__init__()
 
-  def on_train_result(self, *, algorithm, _, result, **kwargs) -> None:
+  def on_train_result(self, *, algorithm, metrics_logger, result, **kwargs) -> None:
     """Callback run after a training iteration has finished."""
 
     results_filepath = os.path.join(algorithm.config["working_folder"],
