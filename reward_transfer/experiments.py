@@ -130,6 +130,11 @@ def parse_arguments() -> argparse.Namespace:
   parser_scratch = subparsers.add_parser(
       "scratch", help="Validate from scratch")
   parser_scratch.add_argument(
+      "--trial_id",
+      type=str,
+      default=None,
+      help="Trial id to use")
+  parser_scratch.add_argument(
       "--num_players", type=int, required=True, help="Number of players")
   parser_scratch.add_argument(
       "--self_interest",
@@ -268,7 +273,7 @@ def create_tune_callbacks(
 def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mapping[str, Any]) -> None:
   """Run hyper-parameter optimisation in a single-agent environment for PPO"""
 
-  def custom_trial_name_creator(trial: Trial) -> str:
+  def optimise_trial_name_creator(trial: Trial) -> str:
     """Create a custom name that includes hyperparameters."""
     attributes = ("sgd_minibatch_size", "num_sgd_iter", "lr", "lambda",
                   "vf_loss_coeff", "clip_param")
@@ -319,7 +324,7 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
       search_alg=search_alg,
       scheduler=scheduler,
       verbose=VERBOSE,
-      trial_name_creator=custom_trial_name_creator,
+      trial_name_creator=optimise_trial_name_creator,
       log_to_file=False,
       callbacks=create_tune_callbacks(args),
       max_concurrent_trials=args.max_concurrent_trials,
@@ -359,7 +364,7 @@ def setup_logging_utils(
           [SaveResultsCallback, LoadPolicyCallback]))
 
   trial_id = args.trial_id if hasattr(
-      args, 'trial_id') and args.trial_id is not None else Trial.generate_id()
+      args, "trial_id") and args.trial_id is not None else Trial.generate_id()
   config["trial_id"] = trial_id
   name = os.path.join(args.substrate, trial_id)
   working_folder = os.path.join(args.local_dir, name)
