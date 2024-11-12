@@ -23,7 +23,7 @@ from ray.tune.search.optuna import OptunaSearch
 from examples.rllib import utils
 from reward_transfer.callbacks import LoadPolicyCallback, SaveResultsCallback
 
-LOGGING_LEVEL = "WARN"
+LOGGING_LEVEL = "INFO"
 VERBOSE = 0  # 0: silent, 1: status
 
 
@@ -223,7 +223,10 @@ def create_model_config(base_env: utils.MeltingPotEnv,
 def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
                       train_batch_size: int, policy_mapping_fn: Callable[str,
                                                                          str],
-                      env_config: Mapping[str, Any], horizon: int) -> PPOConfig:
+                      env_config: Mapping[str, Any]) -> PPOConfig:
+  assert args.rollout_workers < args.num_cpus, f"Must have more CPUs than rollout workers"
+  main_process_cpus = args.num_cpus - args.rollout_workers
+
   return PPOConfig().training(
       gamma=0.999,
       train_batch_size=train_batch_size,
@@ -238,8 +241,8 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   ).env_runners(
       num_env_runners=args.rollout_workers,
       num_envs_per_env_runner=args.envs_per_worker,
-      rollout_fragment_length=horizon,
-      batch_mode="truncate_episodes",
+      rollout_fragment_length=400,
+      batch_mode="complete_episodes",
       sample_timeout_s=600,
   ).environment(
       env_config=env_config,
@@ -253,6 +256,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   ).debugging(
       log_level=LOGGING_LEVEL
   ).resources(
+      num_cpus_for_main_process=main_process_cpus,
       num_gpus=min(args.num_gpus, 1)
   ).framework(
       framework=args.framework
@@ -619,7 +623,7 @@ def main():
     policy_mapping_fn = lambda aid, *_, **__: aid
 
   config = create_ppo_config(args, model, train_batch_size, policy_mapping_fn,
-                             env_config, horizon)
+                             env_config)
 
   if args.training == "optimise":
     run_optimise(args, config, env_config)
