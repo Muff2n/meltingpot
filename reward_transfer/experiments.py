@@ -227,33 +227,40 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   assert args.rollout_workers < args.num_cpus, f"Must have more CPUs than rollout workers"
   main_process_cpus = args.num_cpus - args.rollout_workers
 
-  config = PPOConfig()
-
-  if args.substrate in ["commons_harvest__open", "externality_mushrooms__dense"]:
-    config = config.training(
+  config = PPOConfig().training(
       gamma=0.999,
       train_batch_size=train_batch_size,
       model=model,
+      entropy_coeff=1e-3,
+      vf_clip_param=2,
+    )
+
+  if args.substrate == "commons_harvest__open":
+    config = config.training(
+      lr = 7e-5,
       lambda_=0.99,
       sgd_minibatch_size=min(10000, train_batch_size),
       num_sgd_iter=12,
       vf_loss_coeff=0.8,
-      entropy_coeff=1e-3,
       clip_param=0.32,
-      vf_clip_param=2,
+  )
+  elif args.substrate == "externality_mushrooms__dense":
+    config = config.training(
+      lr = 1.1e-4,
+      lambda_=1.0,
+      sgd_minibatch_size=min(7500, train_batch_size),
+      num_sgd_iter=14,
+      vf_loss_coeff=0.85,
+      clip_param=0.28,
   )
   elif args.substrate == "territory__inside_out":
     config = config.training(
-      gamma=0.999,
-      train_batch_size=train_batch_size,
-      model=model,
+      lr = 2.4e-4,
       lambda_=0.99,
-      sgd_minibatch_size=min(10000, train_batch_size),
+      sgd_minibatch_size=min(5000, train_batch_size),
       num_sgd_iter=12,
-      vf_loss_coeff=0.8,
-      entropy_coeff=1e-3,
-      clip_param=0.32,
-      vf_clip_param=2,
+      vf_loss_coeff=0.85,
+      clip_param=0.34,
   )
   else:
     assert False, f"Unrecognised substrate: {args.substrate}"
@@ -422,11 +429,19 @@ def create_lr_and_policies(
       - Learning rate (float)
       - Dictionary of policies (Dict[str, PolicySpec])
   """
-  if args.training_mode == "independent":
+  if args.substrate == "commons_harvest__open":
     lr = 7e-5
+  elif args.substrate == "externality_mushrooms__dense":
+    lr = 1.1e-4,
+  elif args.substrate == "territory__inside_out":
+    lr = 2.4e-4
+  else:
+    assert False, f"Unrecognised substrate: {args.substrate}"
+
+  if args.training_mode == "independent":
     policies = {aid: PolicySpec() for aid in ordered_agent_ids[:num_players]}
   else:  # self-play
-    lr = 7e-5 / num_players
+    lr = lr / num_players
     policies = {"default": PolicySpec()}
 
   return lr, policies
