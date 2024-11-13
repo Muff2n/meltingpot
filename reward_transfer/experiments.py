@@ -227,7 +227,10 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   assert args.rollout_workers < args.num_cpus, f"Must have more CPUs than rollout workers"
   main_process_cpus = args.num_cpus - args.rollout_workers
 
-  return PPOConfig().training(
+  config = PPOConfig()
+
+  if args.substrate in ["commons_harvest__open", "externality_mushrooms__dense"]:
+    config = config.training(
       gamma=0.999,
       train_batch_size=train_batch_size,
       model=model,
@@ -238,7 +241,24 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
       entropy_coeff=1e-3,
       clip_param=0.32,
       vf_clip_param=2,
-  ).env_runners(
+  )
+  elif args.substrate == "territory__inside_out":
+    config = config.training(
+      gamma=0.999,
+      train_batch_size=train_batch_size,
+      model=model,
+      lambda_=0.99,
+      sgd_minibatch_size=min(10000, train_batch_size),
+      num_sgd_iter=12,
+      vf_loss_coeff=0.8,
+      entropy_coeff=1e-3,
+      clip_param=0.32,
+      vf_clip_param=2,
+  )
+  else:
+    assert False, f"Unrecognised substrate: {args.substrate}"
+
+  config = config.env_runners(
       num_env_runners=args.rollout_workers,
       num_envs_per_env_runner=args.envs_per_worker,
       rollout_fragment_length=400,
@@ -263,6 +283,8 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   ).reporting(
       metrics_num_episodes_for_smoothing=1
   )
+
+  return config
 
 
 def create_tune_callbacks(

@@ -73,3 +73,12 @@ class SaveResultsCallback(DefaultCallbacks):
       json.dump(info, f)
       f.write("\n")
       logger.debug("on_train_result::%s", info)
+
+
+  def on_sample_end(
+        self,
+        *,
+        samples,
+        **kwargs,
+    ) -> None:
+      logger.debug("on_sample_end::env_steps=%s, agent_steps=%s", samples.env_steps(), samples.agent_steps())
