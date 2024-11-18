@@ -17,6 +17,7 @@ dependencies:
   - ml-collections>=0.1.1
   - networkx>=3.2.1
   - numpy>=1.26.3
+  - opencv>=4.9.0
   - pygame>=2.5.2
   - reactivex>=4.0.4
 

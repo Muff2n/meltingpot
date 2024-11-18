@@ -232,7 +232,6 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
       train_batch_size=train_batch_size,
       model=model,
       entropy_coeff=1e-3,
-      vf_clip_param=2,
     )
 
   if args.substrate == "commons_harvest__open":
@@ -243,6 +242,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
       num_sgd_iter=12,
       vf_loss_coeff=0.8,
       clip_param=0.32,
+      vf_clip_param=2,
   )
   elif args.substrate == "externality_mushrooms__dense":
     config = config.training(
@@ -252,6 +252,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
       num_sgd_iter=14,
       vf_loss_coeff=0.85,
       clip_param=0.28,
+      vf_clip_param=2,
   )
   elif args.substrate == "territory__inside_out":
     config = config.training(
@@ -261,6 +262,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
       num_sgd_iter=12,
       vf_loss_coeff=0.85,
       clip_param=0.34,
+      vf_clip_param=2,
   )
   else:
     assert False, f"Unrecognised substrate: {args.substrate}"
@@ -325,12 +327,13 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
   ) >= 10000, f"train_batch_size must be greater than 10000. Suggest increasing --episodes_per_worker"
 
   config = config.training(
-      sgd_minibatch_size=tune.qrandint(5000, 10000, 2500),
-      num_sgd_iter=tune.qrandint(8, 14, 2),
-      lr=tune.qloguniform(5e-5, 3e-4, 1e-5),
-      lambda_=tune.quniform(0.95, 1.0, 0.01),
-      vf_loss_coeff=tune.quniform(0.75, 1, 0.05),
-      clip_param=tune.quniform(0.28, 0.36, 0.02),
+      sgd_minibatch_size=tune.qrandint(2500, 15000, 2500),
+      num_sgd_iter=tune.qrandint(6, 16, 2),
+      lr=tune.qloguniform(3e-5, 3e-3, 5e-5),
+      lambda_=tune.quniform(0.75, 1.0, 0.05),
+      vf_loss_coeff=tune.quniform(0.2, 1, 0.1),
+      clip_param=tune.quniform(0.1, 0.4, 0.05),
+      vf_clip_param=tune.quniform(1, 21, 2),
   ).multi_agent(policies={"default": PolicySpec()})
 
   env_config["roles"] = env_config["roles"][:1]

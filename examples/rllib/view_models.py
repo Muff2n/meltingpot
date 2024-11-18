@@ -16,18 +16,25 @@ Runs the bots trained in self_play_train.py and renders in pygame.
 """
 
 import argparse
+import logging
 
 import cv2
 import dm_env
 from dmlab2d.ui_renderer import pygame
 from ml_collections.config_dict import ConfigDict
 import numpy as np
-from ray.rllib.algorithms.registry import _get_algorithm_class
+import ray
+from ray.rllib.algorithms import PPO, PPOConfig
 from ray.tune.analysis.experiment_analysis import ExperimentAnalysis
 from ray.tune.registry import register_env
 
 from meltingpot import substrate
 from examples.rllib.utils import env_creator, RayModelPolicy
+
+# Configure logging
+logging.basicConfig(
+    filename="view_models.log", filemode="w", level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def get_human_action():
@@ -78,11 +85,6 @@ def main():
       default=500,
       help="Number of timesteps to run the epsiode for")
   parser.add_argument(
-      "--substrate",
-      type=str,
-      default=None,
-      help="Use this substrate instead of the original")
-  parser.add_argument(
       "--video",
       type=str,
       default=None,
@@ -97,7 +99,9 @@ def main():
 
   args = parser.parse_args()
 
-  agent_algorithm = "PPO"
+  ray.init(
+      address="local",
+      num_gpus=0)
 
   register_env("meltingpot", env_creator)
 
@@ -106,30 +110,18 @@ def main():
       default_metric="env_runners/episode_reward_mean",
       default_mode="max")
 
-  checkpoint_path = args.checkpoint if args.checkpoint is not None else experiment.best_checkpoint
 
-  config = experiment.best_config
+  checkpoint_path = args.checkpoint if args.checkpoint is not None else experiment.best_checkpoint.path
 
-  config["explore"] = False
-  config["num_rollout_workers"] = 0
+  config = PPOConfig.from_dict(experiment.best_config)
 
-  trainer = _get_algorithm_class(agent_algorithm)(config=config)
+  config=config.env_runners(num_env_runners=0).resources(num_gpus=0)
+
+  trainer = PPO(config=config)
+
   trainer.load_checkpoint(checkpoint_path)
 
-  # Create a new environment to visualise
-  if args.substrate:
-    substrate_config = substrate.get_config(args.substrate)
-
-    env_config = ConfigDict({
-        "substrate": args.substrate,
-        "substrate_config": substrate_config,
-        # FIXME: Get roles from the training
-        "roles": substrate_config["default_player_roles"],
-        "scaled": 1
-    })
-  else:
-    env_config = config["env_config"]
-
+  env_config = config["env_config"]
   env = env_creator(env_config)
   action_space = env.action_space["player_0"]
 
