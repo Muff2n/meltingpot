@@ -329,7 +329,7 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
   config = config.training(
       sgd_minibatch_size=tune.qrandint(2500, 15000, 2500),
       num_sgd_iter=tune.qrandint(6, 16, 2),
-      lr=tune.qloguniform(3e-5, 3e-3, 5e-5),
+      lr=tune.qloguniform(3e-5, 3e-3, 1e-5),
       lambda_=tune.quniform(0.75, 1.0, 0.05),
       vf_loss_coeff=tune.quniform(0.2, 1, 0.1),
       clip_param=tune.quniform(0.1, 0.4, 0.05),

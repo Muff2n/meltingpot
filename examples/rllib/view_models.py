@@ -80,6 +80,8 @@ def main():
   parser.add_argument(
       "--fps", type=int, default=8, help="Frames per second (default 8)")
   parser.add_argument(
+      "--num_players", type=int, default=8, help="Frames per second (default 8)")
+  parser.add_argument(
       "--timesteps",
       type=int,
       default=500,
