@@ -228,7 +228,6 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   main_process_cpus = args.num_cpus - args.rollout_workers
 
   config = PPOConfig().training(
-      gamma=0.999,
       train_batch_size=train_batch_size,
       model=model,
       entropy_coeff=1e-3,
@@ -236,6 +235,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
 
   if args.substrate == "commons_harvest__open":
     config = config.training(
+      gamma=0.999,
       lr = 7e-5,
       lambda_=0.99,
       sgd_minibatch_size=min(10000, train_batch_size),
@@ -246,6 +246,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   )
   elif args.substrate == "externality_mushrooms__dense":
     config = config.training(
+      gamma=0.999,
       lr = 1.1e-4,
       lambda_=1.0,
       sgd_minibatch_size=min(7500, train_batch_size),
@@ -256,6 +257,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   )
   elif args.substrate == "territory__inside_out":
     config = config.training(
+      gamma=0.999,
       lr = 2.4e-4,
       lambda_=0.99,
       sgd_minibatch_size=min(5000, train_batch_size),
@@ -315,8 +317,8 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
 
   def optimise_trial_name_creator(trial: Trial) -> str:
     """Create a custom name that includes hyperparameters."""
-    attributes = ("sgd_minibatch_size", "num_sgd_iter", "lr", "lambda",
-                  "vf_loss_coeff", "clip_param")
+    attributes = ("gamma", "sgd_minibatch_size", "num_sgd_iter", "lr", "lambda",
+                  "vf_loss_coeff", "clip_param", "vf_clip_param")
     attributes_str = [
         f"{trial.config[a]:.5f}".rstrip("0").rstrip(".") for a in attributes
     ]
@@ -327,13 +329,14 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
   ) >= 10000, f"train_batch_size must be greater than 10000. Suggest increasing --episodes_per_worker"
 
   config = config.training(
+      gamma=tune.quniform(0.9, 0.999, 0.001),
       sgd_minibatch_size=tune.qrandint(2500, 15000, 2500),
       num_sgd_iter=tune.qrandint(6, 16, 2),
       lr=tune.qloguniform(3e-5, 3e-3, 1e-5),
       lambda_=tune.quniform(0.75, 1.0, 0.05),
       vf_loss_coeff=tune.quniform(0.2, 1, 0.1),
       clip_param=tune.quniform(0.1, 0.4, 0.05),
-      vf_clip_param=tune.quniform(1, 21, 2),
+      vf_clip_param=tune.qloguniform(2, 20, 2),
   ).multi_agent(policies={"default": PolicySpec()})
 
   env_config["roles"] = env_config["roles"][:1]
