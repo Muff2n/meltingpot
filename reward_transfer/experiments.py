@@ -358,6 +358,12 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
       brackets=1,
   )
 
+  checkpoint_config = CheckpointConfig(
+    num_to_keep=1,
+    checkpoint_score_attribute="episode_reward_mean",
+    checkpoint_score_order="max",
+    checkpoint_at_end=True)
+
   tune.run(
       run_or_experiment="PPO",
       name=os.path.join(args.substrate, "optimise"),
@@ -367,6 +373,7 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
       storage_path=args.local_dir,
       search_alg=search_alg,
       scheduler=scheduler,
+      checkpoint_config=checkpoint_config,
       verbose=VERBOSE,
       trial_name_creator=optimise_trial_name_creator,
       log_to_file=False,
