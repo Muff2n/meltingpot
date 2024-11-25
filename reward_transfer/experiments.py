@@ -64,7 +64,12 @@ def parse_arguments() -> argparse.Namespace:
       "--rollout_workers",
       type=int,
       required=True,
-      help="Number of rollout workers, should be in [0, num_cpus]")
+      help="Number of rollout workers")
+  parser.add_argument(
+      "--main_process_cpus",
+      type=int,
+      default=1,
+      help="Number of main process workers")
   parser.add_argument(
       "--envs_per_worker",
       type=int,
@@ -224,8 +229,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
                       train_batch_size: int, policy_mapping_fn: Callable[str,
                                                                          str],
                       env_config: Mapping[str, Any]) -> PPOConfig:
-  assert args.rollout_workers < args.num_cpus, f"Must have more CPUs than rollout workers"
-  main_process_cpus = args.num_cpus - args.rollout_workers
+  assert args.rollout_workers + args.main_process_cpus <= args.num_cpus, f"Not enough CPUs requested for rollout workers and main process CPUs"
 
   config = PPOConfig().training(
       train_batch_size=train_batch_size,
@@ -287,7 +291,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   ).debugging(
       log_level=LOGGING_LEVEL
   ).resources(
-      num_cpus_for_main_process=main_process_cpus,
+      num_cpus_for_main_process=args.main_process_cpus,
       num_gpus=min(args.num_gpus, 1)
   ).framework(
       framework=args.framework
@@ -336,7 +340,7 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
       lambda_=tune.quniform(0.75, 1.0, 0.05),
       vf_loss_coeff=tune.quniform(0.2, 1, 0.1),
       clip_param=tune.quniform(0.1, 0.4, 0.05),
-      vf_clip_param=tune.qloguniform(2, 20, 2),
+      vf_clip_param=tune.qrandint(2, 20, 2),
   ).multi_agent(policies={"default": PolicySpec()})
 
   env_config["roles"] = env_config["roles"][:1]
