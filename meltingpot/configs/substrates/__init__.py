@@ -80,6 +80,8 @@ SUBSTRATES: Set[str] = frozenset({
     'chicken_in_the_matrix__arena',
     'chicken_in_the_matrix__repeated',
     'clean_up',
+    'clean_up_eugene',
+    'clean_up_single',
     'coins',
     'collaborative_cooking__asymmetric',
     'collaborative_cooking__circuit',

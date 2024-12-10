@@ -54,13 +54,16 @@ _ENABLE_DEBUG_OBSERVATIONS = False
 
 SPRITE_SIZE = 1
 
+# River area: 147
+# Original starting waste: 79
+# New starting waste: 46
 ASCII_MAP = """
 WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
-WHFFFHFFHFHFHFHFHFHFHHFHFFFHFW
-WHFHFHFFHFHFHFHFHFHFHHFHFFFHFW
-WHFFHFFHHFHFHFHFHFHFHHFHFFFHFW
-WHFHFHFFHFHFHFHFHFHFHHFHFFFHFW
-WHFFFFFFHFHFHFHFHFHFHHFHFFFHFW
+WHFHHHFHHFHHHHHHHHHHHHFHHHHHFW
+WHHHHHHFHHHFHHHFHHHFHHHHFHFHHW
+WHFHHFHHHFHHHHHFHHHHHHFHHHFHFW
+WHFHFHHFHHHFHFHHHFHFHHHHFHHHFW
+WHFFHFHFHFHFHFHFHFHFHHFHFHFHFW
 W==============+~FHHHHHHf====W
 W   P    P      ===+~SSf     W
 W     P     P   P  <~Sf  P   W
@@ -399,7 +402,7 @@ POTENTIAL_APPLE = {
         {
             "component": "AppleGrow",
             "kwargs": {
-                "maxAppleGrowthRate": 0.05,
+                "maxAppleGrowthRate": 0.01,
                 "thresholdDepletion": 0.4,
                 "thresholdRestoration": 0.0,
             }
@@ -447,6 +450,7 @@ def create_dirt_prefab(initial_state):
               "kwargs": {
                   "activeState": "dirt",
                   "inactiveState": "dirtWait",
+                  "cap": True,
               }
           },
           {
@@ -600,10 +604,11 @@ def create_scene():
               "kwargs": {},
           },
           {
-              "component": "DirtSpawner",
+              "component": "DirtSpawnerCapped",
               "kwargs": {
-                  "dirtSpawnProbability": 0.5,
-                  "delayStartOfDirtSpawning": 50,
+                  "dirtSpawnProbability": 0.07,
+                  "delayStartOfDirtSpawning": 0,
+                  "threshold": 0.4,
               },
           },
           {
@@ -835,7 +840,7 @@ def get_config():
 
   # The roles assigned to each player.
   config.valid_roles = frozenset({"default"})
-  config.default_player_roles = ("default",) * 7
+  config.default_player_roles = ("default",) * 1
 
   return config
 
