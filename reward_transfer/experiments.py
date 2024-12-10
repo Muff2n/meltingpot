@@ -18,6 +18,7 @@ from ray.rllib.policy.policy import PolicySpec
 from ray.tune.experiment import Trial
 from ray.tune.registry import register_env
 from ray.tune.schedulers import ASHAScheduler
+from ray.tune.search import Repeater
 from ray.tune.search.optuna import OptunaSearch
 
 from examples.rllib import utils
@@ -99,6 +100,11 @@ def parse_arguments() -> argparse.Namespace:
       type=int,
       default=100,
       help="Number of samples to run for hyperparameter optimisation")
+  parser_optimise.add_argument(
+      "--repeat",
+      type=int,
+      default=4,
+      help="Number of times to repeat a sample to smooth the variance")
 
   parser_pretraining = subparsers.add_parser(
       "pre-training", help="Pre-train a policy")
@@ -270,6 +276,18 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
       clip_param=0.34,
       vf_clip_param=2,
   )
+  elif args.substrate == "clean_up_single":
+    # TODO actually tune
+    config = config.training(
+      gamma=0.999,
+      lr = 7e-5,
+      lambda_=0.99,
+      sgd_minibatch_size=min(10000, train_batch_size),
+      num_sgd_iter=12,
+      vf_loss_coeff=0.8,
+      clip_param=0.32,
+      vf_clip_param=2,
+  )
   else:
     assert False, f"Unrecognised substrate: {args.substrate}"
 
@@ -352,15 +370,17 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
       mode="max",
   )
 
-  scheduler = ASHAScheduler(
-      time_attr="training_iteration",
-      metric="env_runners/episode_reward_mean",
-      mode="max",
-      max_t=args.n_iterations,
-      grace_period=max(1, args.n_iterations // 2),
-      reduction_factor=2,
-      brackets=1,
-  )
+  repeater = Repeater(search_alg, repeat=args.repeat)
+
+  # scheduler = ASHAScheduler(
+  #     time_attr="training_iteration",
+  #     metric="env_runners/episode_reward_mean",
+  #     mode="max",
+  #     max_t=args.n_iterations,
+  #     grace_period=max(1, args.n_iterations // 2),
+  #     reduction_factor=2,
+  #     brackets=1,
+  # )
 
   checkpoint_config = CheckpointConfig(
     num_to_keep=1,
@@ -375,8 +395,9 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
       config=config,
       num_samples=args.num_samples,
       storage_path=args.local_dir,
-      search_alg=search_alg,
-      scheduler=scheduler,
+      # search_alg=search_alg,
+      # scheduler=scheduler,
+      search_alg=repeater,
       checkpoint_config=checkpoint_config,
       verbose=VERBOSE,
       trial_name_creator=optimise_trial_name_creator,
@@ -452,6 +473,8 @@ def create_lr_and_policies(
     lr = 1.1e-4,
   elif args.substrate == "territory__inside_out":
     lr = 2.4e-4
+  elif args.substrate == "clean_up_single"
+    lr = 7e-5
   else:
     assert False, f"Unrecognised substrate: {args.substrate}"
 
