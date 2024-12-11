@@ -845,6 +845,7 @@ def build(
     config: config_dict.ConfigDict,
 ) -> Mapping[str, Any]:
   """Build the clean_up substrate given roles."""
+  default_num_players = len(config.default_player_roles)
   del config
   num_players = len(roles)
   # Build the rest of the substrate definition.
@@ -864,4 +865,19 @@ def build(
           "charPrefabMap": CHAR_PREFAB_MAP,
       },
     )
+
+  scene = substrate_definition["simulation"]["scene"]
+  prefabs = substrate_definition["simulation"]["prefabs"]
+
+  def get_component(components: list[dict[str, str]], name: str):
+    for item in components:
+      if item["component"] == name:
+        return item
+
+  item = get_component(prefabs["potential_apple"]["components"], "AppleGrow")
+  item["kwargs"]["maxAppleGrowthRate"] *= (num_players / default_num_players)
+
+  item = get_component(scene["components"], "DirtSpawner")
+  item["kwargs"]["dirtSpawnProbability"] *= (num_players / default_num_players)
+
   return substrate_definition

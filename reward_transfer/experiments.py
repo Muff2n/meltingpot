@@ -473,7 +473,7 @@ def create_lr_and_policies(
     lr = 1.1e-4,
   elif args.substrate == "territory__inside_out":
     lr = 2.4e-4
-  elif args.substrate == "clean_up_single"
+  elif args.substrate == "clean_up_single":
     lr = 7e-5
   else:
     assert False, f"Unrecognised substrate: {args.substrate}"
