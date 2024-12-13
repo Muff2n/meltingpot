@@ -29,13 +29,22 @@ class LoadPolicyCallback(DefaultCallbacks):
     if policy_checkpoint is not None:
       pretrained_path = os.path.join(policy_checkpoint, "policies", policy_id)
 
-      # If we are pre-training and using independent training-mode, the new
-      # player_n will not have a policy to start from. In this case start them
-      # as a copy of player_1
       if not os.path.isdir(pretrained_path) and policy.config.get(
           "training-mode") == "independent":
-        pretrained_path = os.path.join(policy_checkpoint, "policies",
-                                       "player_0")
+        # There are two situations where we could be running in independent mode
+        # and the policy does not exist under the expected policy_id
+        test_path = os.path.join(policy_checkpoint, "policies", "default")
+
+        # Case 1: we are training from a policy returned from the hyperparameter
+        # optimisation, which is called "default"
+        if os.path.isdir(test_path):
+          pretrained_path = test_path
+
+        # Case 2: we are pre-training and, the additional player will not have a
+        # prior policy to start from, so we use "player-0"
+        else:
+          pretrained_path = os.path.join(policy_checkpoint, "policies",
+                                         "player_0")
 
       if os.path.isdir(pretrained_path):
         logger.info(

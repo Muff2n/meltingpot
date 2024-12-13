@@ -114,6 +114,11 @@ def parse_arguments() -> argparse.Namespace:
       default=None,
       help="Trial id to resume training from (if we had an error)")
   parser_pretraining.add_argument(
+      "--player_1_checkpoint",
+      type=str,
+      default=None,
+      help="Policy checkpoint to start the initial policy from")
+  parser_pretraining.add_argument(
       "--training_mode",
       type=str,
       choices=["independent", "self-play"],
@@ -143,6 +148,11 @@ def parse_arguments() -> argparse.Namespace:
       type=str,
       default=None,
       help="Trial id to use")
+  parser_pretraining.add_argument(
+      "--scratch_checkpoint",
+      type=str,
+      default=None,
+      help="Policy checkpoint to start the initial policy from")
   parser_scratch.add_argument(
       "--num_players", type=int, required=True, help="Number of players")
   parser_scratch.add_argument(
@@ -276,17 +286,17 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
       clip_param=0.34,
       vf_clip_param=2,
   )
-  elif args.substrate == "clean_up_single":
+  elif "clean_up" in args.substrate:
     # TODO actually tune
     config = config.training(
-      gamma=0.999,
-      lr = 7e-5,
-      lambda_=0.99,
-      sgd_minibatch_size=min(10000, train_batch_size),
-      num_sgd_iter=12,
-      vf_loss_coeff=0.8,
-      clip_param=0.32,
-      vf_clip_param=2,
+      gamma=0.99,
+      lr = 1e-4,
+      lambda_=0.95,
+      sgd_minibatch_size=min(12500, train_batch_size),
+      num_sgd_iter=14,
+      vf_loss_coeff=0.7,
+      clip_param=0.25,
+      vf_clip_param=4,
   )
   else:
     assert False, f"Unrecognised substrate: {args.substrate}"
@@ -473,8 +483,8 @@ def create_lr_and_policies(
     lr = 1.1e-4,
   elif args.substrate == "territory__inside_out":
     lr = 2.4e-4
-  elif args.substrate == "clean_up_single":
-    lr = 7e-5
+  elif "clean_up" in args.substrate:
+    lr = 1e-4
   else:
     assert False, f"Unrecognised substrate: {args.substrate}"
 
@@ -527,6 +537,10 @@ def run_pretraining(args: argparse.Namespace, config: PPOConfig,
         env_config["self-interest"] = info["self_interest"]
       start_n += info["num_players"]
       config["policy_checkpoint"] = info["policy_checkpoint"]
+  # otherwise, we can initially start from another checkpoint, for example in
+  # cleanup, the best optimisation policy
+  elif args.player_1_checkpoint:
+    config["policy_checkpoint"] = args.player_1_checkpoint
 
   default_player_roles = env_config["substrate_config"]["default_player_roles"]
   for n in range(start_n, len(default_player_roles) + 1):
@@ -641,7 +655,7 @@ def run_scratch(args: argparse.Namespace, config: ConfigDict,
       args, config)
 
   # not required, but explicitly set
-  config["policy_checkpoint"] = None
+  config["policy_checkpoint"] = args.scratch_checkpoint
 
   n = args.num_players
 
