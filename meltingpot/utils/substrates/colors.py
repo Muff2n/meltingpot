@@ -80,17 +80,17 @@ palette = (
 # LINT.ThenChange(//meltingpot/lua/modules/colors.lua)
 
 human_readable = (
-    (45, 110, 220), # blue
+    # (45, 110, 220), # blue
     (125, 50, 200), # purple
     (205, 5, 165),  # pink
-    (245, 65, 65),  # red
-    (245, 130, 0),  # orange
+    # (245, 65, 65),  # red
+    # (245, 130, 0),  # orange
     (195, 180, 0),  # dirty yellow
     (125, 185, 65), # green
-    (35, 185, 175), # teal
+    # (35, 185, 175), # teal
     (160, 15, 200), # purple
     (230, 50, 95),  # pink
-    (230, 90, 55),  # rust
+    # (230, 90, 55),  # rust
     (220, 140, 15), # gold
     (180, 195, 0),  # lime
     (25, 210, 140), # teal

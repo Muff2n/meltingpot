@@ -16,6 +16,7 @@ Runs the bots trained in self_play_train.py and renders in pygame.
 """
 
 import argparse
+import importlib
 import logging
 
 import cv2
@@ -80,8 +81,6 @@ def main():
   parser.add_argument(
       "--fps", type=int, default=8, help="Frames per second (default 8)")
   parser.add_argument(
-      "--num_players", type=int, default=8, help="Frames per second (default 8)")
-  parser.add_argument(
       "--timesteps",
       type=int,
       default=500,
@@ -98,6 +97,10 @@ def main():
       choices=["self-play", "independent"],
       help="""self-play: all players share the same policy
     independent: use n policies""")
+  parser.add_argument(
+      "--substrate", type=str, default=None, help="Only use if you know what you are doing")
+  parser.add_argument(
+      "--num_players", type=int, default=None, help="Only use if you know what you are doing")
 
   args = parser.parse_args()
 
@@ -112,23 +115,38 @@ def main():
       default_metric="env_runners/episode_reward_mean",
       default_mode="max")
 
-
   checkpoint_path = args.checkpoint if args.checkpoint is not None else experiment.best_checkpoint.path
 
   config = PPOConfig.from_dict(experiment.best_config)
 
-  config=config.env_runners(num_env_runners=0).resources(num_gpus=0)
+  config = config.env_runners(num_env_runners=0).resources(num_gpus=0)
 
   trainer = PPO(config=config)
 
   trainer.load_checkpoint(checkpoint_path)
 
-  env_config = config["env_config"]
-  env = env_creator(env_config)
-  action_space = env.action_space["player_0"]
+  if args.substrate:
+    substrate_config = substrate.get_config(args.substrate)
 
-  # Setup the players
-  num_players = len(env._ordered_agent_ids)
+    env_module = importlib.import_module(
+        f"meltingpot.configs.substrates.{args.substrate}")
+
+    num_players = len(substrate_config.default_player_roles)
+    if args.num_players:
+      num_players = min(args.num_players, num_players)
+
+    roles = substrate_config.default_player_roles[0:num_players]
+
+    env_config = ConfigDict({
+        "substrate": args.substrate,
+        "substrate_config": substrate_config,
+        "roles": roles,
+        "scaled": 1
+    })
+  else:
+    env_config = config["env_config"]
+
+  env = env_creator(env_config)
 
   if args.training == "independent":
     policies = env._ordered_agent_ids
