@@ -296,7 +296,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
       num_sgd_iter=14,
       vf_loss_coeff=0.7,
       clip_param=0.25,
-      vf_clip_param=4,
+      vf_clip_param=2,
   )
   else:
     assert False, f"Unrecognised substrate: {args.substrate}"

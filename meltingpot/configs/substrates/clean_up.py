@@ -447,6 +447,7 @@ def create_dirt_prefab(initial_state):
               "kwargs": {
                   "activeState": "dirt",
                   "inactiveState": "dirtWait",
+                  "cap": True,
               }
           },
           {
@@ -600,10 +601,11 @@ def create_scene():
               "kwargs": {},
           },
           {
-              "component": "DirtSpawner",
+              "component": "DirtSpawnerCapped",
               "kwargs": {
                   "dirtSpawnProbability": 0.5,
                   "delayStartOfDirtSpawning": 50,
+                  "threshold": 1.0,  # will be set dynamically
               },
           },
           {
@@ -877,7 +879,8 @@ def build(
   item = get_component(prefabs["potential_apple"]["components"], "AppleGrow")
   item["kwargs"]["maxAppleGrowthRate"] *= (num_players / default_num_players)
 
-  item = get_component(scene["components"], "DirtSpawner")
+  item = get_component(scene["components"], "DirtSpawnerCapped")
   item["kwargs"]["dirtSpawnProbability"] *= (num_players / default_num_players)
+  item["kwargs"]["threshold"] = 0.37 + 0.63 * (num_players / default_num_players)
 
   return substrate_definition

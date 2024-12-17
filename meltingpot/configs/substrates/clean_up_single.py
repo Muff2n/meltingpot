@@ -55,8 +55,8 @@ _ENABLE_DEBUG_OBSERVATIONS = False
 SPRITE_SIZE = 1
 
 # River area: 147
-# Original starting waste: 79
-# New starting waste: 46
+# Original starting waste: 79 = 54%
+# New starting waste: 46 = 32%
 ASCII_MAP = """
 WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
 WHFHHHFHHFHHHHHHHHHHHHFHHHHHFW
