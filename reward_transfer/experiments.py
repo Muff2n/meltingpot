@@ -354,7 +354,7 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
     attributes_str = [
         f"{trial.config[a]:.5f}".rstrip("0").rstrip(".") for a in attributes
     ]
-    return f"{trial.trainable_name}_{trial.trial_id}_{','.join(attributes_str)}"
+    return f"{trial.trainable_name}_{trial.trial_id}_{'-'.join(attributes_str)}"
 
   assert config.get(
       "train_batch_size"

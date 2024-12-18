@@ -27,6 +27,7 @@ class LoadPolicyCallback(DefaultCallbacks):
     policy_checkpoint = policy.config.get("policy_checkpoint")
 
     if policy_checkpoint is not None:
+      assert os.path.isdir(policy_checkpoint), f"Policy checkpoint {policy_checkpoint} does not exist"
       pretrained_path = os.path.join(policy_checkpoint, "policies", policy_id)
 
       if not os.path.isdir(pretrained_path) and policy.config.get(
@@ -54,6 +55,7 @@ class LoadPolicyCallback(DefaultCallbacks):
         pretrained_weights = pretrained_policy.get_weights()
         policy.set_weights(pretrained_weights)
       else:
+        assert False, f"Could not find suitable a policy for {policy_id}"
         logger.warn(
             "on_create_policy::Process %s:Pretrained policy %s does not exist",
             os.getpid(), pretrained_path)
