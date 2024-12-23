@@ -145,6 +145,7 @@ def main():
     })
   else:
     env_config = config["env_config"]
+    num_players = len(env_config["roles"])
 
   env = env_creator(env_config)
 

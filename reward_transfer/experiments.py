@@ -140,6 +140,8 @@ def parse_arguments() -> argparse.Namespace:
       choices=["independent", "self-play"],
       required=True,
       help="self-play enables parameter sharing")
+  parser_training.add_argument(
+      "--num_to_run", type=int, default=None, help="Number of self-interests to run (for splitting long runs)")
 
   parser_scratch = subparsers.add_parser(
       "scratch", help="Validate from scratch")
@@ -611,7 +613,11 @@ def run_training(args: argparse.Namespace, config: PPOConfig,
   ratio = [20, 10, 5, 3, 5 / 2, 2, 5 / 3, 4 / 3, 1]
   # If we are resuming
   n_completed = len(df[condition]["self-interest"])
-  for s in [r / (n + r - 1) for r in ratio[(n_completed - 1):]]:
+  if args.num_to_run:
+    run_until = min(n_completed + args.num_to_run - 1, len(ratio))
+  else:
+    run_until = len(ratio)
+  for s in [r / (n + r - 1) for r in ratio[(n_completed - 1):run_until]]:
     env_config["self-interest"] = s
 
     config = config.environment(env_config=env_config)
