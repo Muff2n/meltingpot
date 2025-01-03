@@ -93,7 +93,7 @@ def main():
   parser.add_argument(
       "--training",
       type=str,
-      default="self-play",
+      required=True,
       choices=["self-play", "independent"],
       help="""self-play: all players share the same policy
     independent: use n policies""")
@@ -120,6 +120,8 @@ def main():
   config = PPOConfig.from_dict(experiment.best_config)
 
   config = config.env_runners(num_env_runners=0).resources(num_gpus=0)
+  # Prevent loading of any other checkpoints
+  config["policy_checkpoint"] = None
 
   trainer = PPO(config=config)
 

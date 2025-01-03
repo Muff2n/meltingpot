@@ -150,7 +150,7 @@ def parse_arguments() -> argparse.Namespace:
       type=str,
       default=None,
       help="Trial id to use")
-  parser_pretraining.add_argument(
+  parser_scratch.add_argument(
       "--scratch_checkpoint",
       type=str,
       default=None,
@@ -161,7 +161,7 @@ def parse_arguments() -> argparse.Namespace:
       "--self_interest",
       type=float,
       required=True,
-      help="Self-interest level (resuming crashed training)")
+      help="Self-interest level")
   parser_scratch.add_argument(
       "--num_seeds",
       type=int,
