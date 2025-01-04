@@ -660,7 +660,7 @@ def run_scratch(args: argparse.Namespace, config: ConfigDict,
   config, name, custom_trial_name_creator, checkpoints_log_filepath = setup_logging_utils(
       args, config)
 
-  # not required, but explicitly set
+  config["trial_id"] = args.trial_id
   config["policy_checkpoint"] = args.scratch_checkpoint
 
   n = args.num_players
@@ -673,7 +673,7 @@ def run_scratch(args: argparse.Namespace, config: ConfigDict,
   env_config["self-interest"] = args.self_interest
 
   config = config.training(lr=lr).multi_agent(
-      policies=policies,).environment(env_config=env_config)
+      policies=policies).environment(env_config=env_config)
 
   tune.run(
       run_or_experiment="PPO",

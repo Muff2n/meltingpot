@@ -32,9 +32,7 @@ from ray.tune.registry import register_env
 from meltingpot import substrate
 from examples.rllib.utils import env_creator, RayModelPolicy
 
-# Configure logging
-logging.basicConfig(
-    filename="view_models.log", filemode="w", level=logging.INFO)
+logging.basicConfig(filename="view_models.log", filemode="w", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -101,6 +99,8 @@ def main():
       "--substrate", type=str, default=None, help="Only use if you know what you are doing")
   parser.add_argument(
       "--num_players", type=int, default=None, help="Only use if you know what you are doing")
+  parser.add_argument(
+      "--policy_checkpoint", type=str, default=None, help="Only use if you know what you are doing")
 
   args = parser.parse_args()
 
@@ -120,8 +120,9 @@ def main():
   config = PPOConfig.from_dict(experiment.best_config)
 
   config = config.env_runners(num_env_runners=0).resources(num_gpus=0)
-  # Prevent loading of any other checkpoints
-  config["policy_checkpoint"] = None
+
+  # Used to overwrite the policies if desired, otherwise prevent loading of any
+  config["policy_checkpoint"] = args.policy_checkpoint
 
   trainer = PPO(config=config)
 
