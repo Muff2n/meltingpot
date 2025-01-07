@@ -660,7 +660,6 @@ def run_scratch(args: argparse.Namespace, config: ConfigDict,
   config, name, custom_trial_name_creator, checkpoints_log_filepath = setup_logging_utils(
       args, config)
 
-  config["trial_id"] = args.trial_id
   config["policy_checkpoint"] = args.scratch_checkpoint
 
   n = args.num_players
