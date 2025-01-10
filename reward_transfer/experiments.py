@@ -660,9 +660,22 @@ def run_scratch(args: argparse.Namespace, config: ConfigDict,
   config, name, custom_trial_name_creator, checkpoints_log_filepath = setup_logging_utils(
       args, config)
 
-  config["policy_checkpoint"] = args.scratch_checkpoint
-
   n = args.num_players
+
+  if os.path.exists(checkpoints_log_filepath):
+    df = pd.read_json(checkpoints_log_filepath, lines=True)
+    condition = (df["num_players"] == n) & \
+      (df["training-mode"] == args.training_mode) & \
+      (df["self-interest"] == args.self_interest)
+
+    n_trial = len(df[condition])
+  else:
+    n_trial = 0
+
+  def monkey_trial_name_creator(trial: Trial) -> str:
+    return custom_trial_name_creator(trial) + f"_{n_trial}"
+
+  config["policy_checkpoint"] = args.scratch_checkpoint
 
   env_config["roles"] = env_config["substrate_config"][
       "default_player_roles"][:n]
@@ -674,7 +687,10 @@ def run_scratch(args: argparse.Namespace, config: ConfigDict,
   config = config.training(lr=lr).multi_agent(
       policies=policies).environment(env_config=env_config)
 
-  tune.run(
+  # n = find how many have already run by consulting checkpoints
+  # monkey patch trial_creator to append _n
+
+  experiment = tune.run(
       run_or_experiment="PPO",
       name=name,
       metric="env_runners/episode_reward_mean",
@@ -684,13 +700,17 @@ def run_scratch(args: argparse.Namespace, config: ConfigDict,
       storage_path=args.local_dir,
       checkpoint_config=CheckpointConfig(checkpoint_at_end=True),
       verbose=VERBOSE,
-      trial_name_creator=custom_trial_name_creator,
-      trial_dirname_creator=custom_trial_name_creator,
+      trial_name_creator=monkey_trial_name_creator,
+      trial_dirname_creator=monkey_trial_name_creator,
       log_to_file=False,
       callbacks=create_tune_callbacks(args),
       max_concurrent_trials=args.max_concurrent_trials,
       num_samples=args.num_seeds,
   )
+
+  policy_checkpoint = experiment.trials[-1].checkpoint.path
+  config["policy_checkpoint"] = policy_checkpoint
+  log_checkpoint_info(config, checkpoints_log_filepath)
 
 
 def main():
