@@ -536,7 +536,7 @@ def run_pretraining(args: argparse.Namespace, config: PPOConfig,
     with open(checkpoints_log_filepath, mode="r", encoding="utf8") as f:
       info = json.loads(f.readlines()[-1])
       if info["self-interest"] != 1:
-        env_config["self-interest"] = info["self_interest"]
+        env_config["self-interest"] = round(info["self_interest"], 3)
       start_n += info["num_players"]
       config["policy_checkpoint"] = info["policy_checkpoint"]
   # otherwise, we can initially start from another checkpoint, for example in
@@ -618,7 +618,7 @@ def run_training(args: argparse.Namespace, config: PPOConfig,
   else:
     run_until = len(ratio)
   for s in [r / (n + r - 1) for r in ratio[(n_completed - 1):run_until]]:
-    env_config["self-interest"] = s
+    env_config["self-interest"] = round(s, 3)
 
     config = config.environment(env_config=env_config)
 
@@ -667,7 +667,7 @@ def run_scratch(args: argparse.Namespace, config: ConfigDict,
 
   lr, policies = create_lr_and_policies(args, n, ordered_agent_ids)
 
-  env_config["self-interest"] = args.self_interest
+  env_config["self-interest"] = round(args.self_interest, 3)
 
   config = config.training(lr=lr).multi_agent(
       policies=policies).environment(env_config=env_config)
@@ -679,11 +679,13 @@ def run_scratch(args: argparse.Namespace, config: ConfigDict,
       df = pd.read_json(checkpoints_log_filepath, lines=True)
       condition = (df["num_players"] == n) & \
         (df["training-mode"] == args.training_mode) & \
-        (df["self-interest"] == args.self_interest)
+        (df["self-interest"] == env_config["self-interest"])
 
       n_trial = len(df[condition])
     else:
       n_trial = 0
+
+    print(f"n_trial = {n_trial}")
 
     def monkey_trial_name_creator(trial: Trial) -> str:
       return custom_trial_name_creator(trial) + f"_{n_trial}"
