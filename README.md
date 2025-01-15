@@ -1,6 +1,6 @@
-# Self-Interest Level Induces Cooperation in Markov Social Dilemmas
+# Quantifying the Self-Interest Level of Markov Social Dilemmas
 
-This is the code to reproduce the experiments from https://openreview.net/forum?id=bVCMgNbvLo&noteId=bVCMgNbvLo, which is under submission at AAAI.
+This is the code to reproduce the paper submitted to IJCAI 2025.
 
 ## Installation
 
