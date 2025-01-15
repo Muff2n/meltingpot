@@ -23,6 +23,7 @@ __pycache__/
 
 # Type checking
 .pytype
+*flycheck_*
 
 # Saved models.
 /examples/results/

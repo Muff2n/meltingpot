@@ -16,18 +16,24 @@ Runs the bots trained in self_play_train.py and renders in pygame.
 """
 
 import argparse
+import importlib
+import logging
 
 import cv2
 import dm_env
 from dmlab2d.ui_renderer import pygame
 from ml_collections.config_dict import ConfigDict
 import numpy as np
-from ray.rllib.algorithms.registry import _get_algorithm_class
+import ray
+from ray.rllib.algorithms import PPO, PPOConfig
 from ray.tune.analysis.experiment_analysis import ExperimentAnalysis
 from ray.tune.registry import register_env
 
 from meltingpot import substrate
 from examples.rllib.utils import env_creator, RayModelPolicy
+
+logging.basicConfig(filename="view_models.log", filemode="w", level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def get_human_action():
@@ -78,11 +84,6 @@ def main():
       default=500,
       help="Number of timesteps to run the epsiode for")
   parser.add_argument(
-      "--substrate",
-      type=str,
-      default=None,
-      help="Use this substrate instead of the original")
-  parser.add_argument(
       "--video",
       type=str,
       default=None,
@@ -90,14 +91,22 @@ def main():
   parser.add_argument(
       "--training",
       type=str,
-      default="self-play",
+      required=True,
       choices=["self-play", "independent"],
       help="""self-play: all players share the same policy
     independent: use n policies""")
+  parser.add_argument(
+      "--substrate", type=str, default=None, help="Only use if you know what you are doing")
+  parser.add_argument(
+      "--num_players", type=int, default=None, help="Only use if you know what you are doing")
+  parser.add_argument(
+      "--policy_checkpoint", type=str, default=None, help="Only use if you know what you are doing")
 
   args = parser.parse_args()
 
-  agent_algorithm = "PPO"
+  ray.init(
+      address="local",
+      num_gpus=0)
 
   register_env("meltingpot", env_creator)
 
@@ -106,40 +115,46 @@ def main():
       default_metric="env_runners/episode_reward_mean",
       default_mode="max")
 
-  checkpoint_path = args.checkpoint if args.checkpoint is not None else experiment.best_checkpoint
+  checkpoint_path = args.checkpoint if args.checkpoint is not None else experiment.best_checkpoint.path
 
-  config = experiment.best_config
+  config = PPOConfig.from_dict(experiment.best_config)
 
-  config["explore"] = False
-  config["num_rollout_workers"] = 0
+  config = config.env_runners(num_env_runners=0).resources(num_gpus=0)
 
-  trainer = _get_algorithm_class(agent_algorithm)(config=config)
-  trainer.load_checkpoint(checkpoint_path)
+  # Used to overwrite the policies if desired, otherwise prevent loading of any
+  config["policy_checkpoint"] = args.policy_checkpoint
 
-  # Create a new environment to visualise
   if args.substrate:
     substrate_config = substrate.get_config(args.substrate)
+
+    env_module = importlib.import_module(
+        f"meltingpot.configs.substrates.{args.substrate}")
+
+    num_players = len(substrate_config.default_player_roles)
+    if args.num_players:
+      num_players = min(args.num_players, num_players)
+
+    roles = substrate_config.default_player_roles[0:num_players]
 
     env_config = ConfigDict({
         "substrate": args.substrate,
         "substrate_config": substrate_config,
-        # FIXME: Get roles from the training
-        "roles": substrate_config["default_player_roles"],
+        "roles": roles,
         "scaled": 1
     })
   else:
     env_config = config["env_config"]
+    num_players = len(env_config["roles"])
 
   env = env_creator(env_config)
-  action_space = env.action_space["player_0"]
-
-  # Setup the players
-  num_players = len(env._ordered_agent_ids)
 
   if args.training == "independent":
     policies = env._ordered_agent_ids
   else:
     policies = env_config["roles"]
+
+  trainer = PPO(config=config)
+  trainer.load_checkpoint(checkpoint_path)
 
   bots = [
       RayModelPolicy(
@@ -182,7 +197,7 @@ def main():
 
     game_display.blit(surf, dest=(0, 0))
     pygame.display.update()
-    # pgyame.image.save(game_display, "image_name.jpeg")
+    # pygame.image.save(game_display, f"{env_config['substrate']}.jpeg")
 
     if args.video:
       # Capture the frame for recording
