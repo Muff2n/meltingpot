@@ -124,10 +124,6 @@ def main():
   # Used to overwrite the policies if desired, otherwise prevent loading of any
   config["policy_checkpoint"] = args.policy_checkpoint
 
-  trainer = PPO(config=config)
-
-  trainer.load_checkpoint(checkpoint_path)
-
   if args.substrate:
     substrate_config = substrate.get_config(args.substrate)
 
@@ -156,6 +152,9 @@ def main():
     policies = env._ordered_agent_ids
   else:
     policies = env_config["roles"]
+
+  trainer = PPO(config=config)
+  trainer.load_checkpoint(checkpoint_path)
 
   bots = [
       RayModelPolicy(
@@ -198,7 +197,7 @@ def main():
 
     game_display.blit(surf, dest=(0, 0))
     pygame.display.update()
-    # pgyame.image.save(game_display, "image_name.jpeg")
+    # pygame.image.save(game_display, f"{env_config['substrate']}.jpeg")
 
     if args.video:
       # Capture the frame for recording
