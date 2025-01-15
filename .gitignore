@@ -34,4 +34,3 @@ __pycache__/
 .virtual_documents
 callbacks.log
 *png
-*jpeg
