@@ -27,15 +27,25 @@ class LoadPolicyCallback(DefaultCallbacks):
     policy_checkpoint = policy.config.get("policy_checkpoint")
 
     if policy_checkpoint is not None:
+      assert os.path.isdir(policy_checkpoint), f"Policy checkpoint {policy_checkpoint} does not exist"
       pretrained_path = os.path.join(policy_checkpoint, "policies", policy_id)
 
-      # If we are pre-training and using independent training-mode, the new
-      # player_n will not have a policy to start from. In this case start them
-      # as a copy of player_1
       if not os.path.isdir(pretrained_path) and policy.config.get(
           "training-mode") == "independent":
-        pretrained_path = os.path.join(policy_checkpoint, "policies",
-                                       "player_0")
+        # There are two situations where we could be running in independent mode
+        # and the policy does not exist under the expected policy_id
+        test_path = os.path.join(policy_checkpoint, "policies", "default")
+
+        # Case 1: we are training from a policy returned from the hyperparameter
+        # optimisation, which is called "default"
+        if os.path.isdir(test_path):
+          pretrained_path = test_path
+
+        # Case 2: we are pre-training and, the additional player will not have a
+        # prior policy to start from, so we use "player-0"
+        else:
+          pretrained_path = os.path.join(policy_checkpoint, "policies",
+                                         "player_0")
 
       if os.path.isdir(pretrained_path):
         logger.info(
@@ -45,6 +55,7 @@ class LoadPolicyCallback(DefaultCallbacks):
         pretrained_weights = pretrained_policy.get_weights()
         policy.set_weights(pretrained_weights)
       else:
+        assert False, f"Could not find suitable a policy for {policy_id}"
         logger.warn(
             "on_create_policy::Process %s:Pretrained policy %s does not exist",
             os.getpid(), pretrained_path)
@@ -73,3 +84,12 @@ class SaveResultsCallback(DefaultCallbacks):
       json.dump(info, f)
       f.write("\n")
       logger.debug("on_train_result::%s", info)
+
+
+  def on_sample_end(
+        self,
+        *,
+        samples,
+        **kwargs,
+    ) -> None:
+      logger.debug("on_sample_end::env_steps=%s, agent_steps=%s", samples.env_steps(), samples.agent_steps())
