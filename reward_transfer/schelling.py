@@ -63,6 +63,8 @@ def main():
 
   substrate_config = substrate.get_config(config["env_config"]["substrate"])
 
+  # reset attributes
+  config["policy_checkpoint"] = None
   config["env_config"]["self-interest"] = 1
   config["env_config"]["roles"] = substrate_config.default_player_roles
 
