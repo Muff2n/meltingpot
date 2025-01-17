@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from meltingpot import substrate
 from ml_collections.config_dict import ConfigDict
+import numpy as np
 import pandas as pd
 import ray
 from ray import tune
@@ -678,7 +679,7 @@ def run_scratch(args: argparse.Namespace, config: ConfigDict,
       df = pd.read_json(checkpoints_log_filepath, lines=True)
       condition = (df["num_players"] == n) & \
         (df["training-mode"] == args.training_mode) & \
-        (df["self-interest"] == env_config["self-interest"])
+        np.isclose(df["self-interest"], env_config["self-interest"], rtol=1e-4)
 
       n_trial = len(df[condition])
     else:
