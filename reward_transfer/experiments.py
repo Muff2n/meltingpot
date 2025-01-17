@@ -112,7 +112,7 @@ def parse_arguments() -> argparse.Namespace:
       "--trial_id",
       type=str,
       default=None,
-      help="Trial id to resume training from (if we had an error)")
+      help="Trial id to resume training from, using the last checkpoint")
   parser_pretraining.add_argument(
       "--player_1_checkpoint",
       type=str,
@@ -258,7 +258,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   if args.substrate == "commons_harvest__open":
     config = config.training(
       gamma=0.999,
-      lr = 7e-5,
+      lr=7e-5,
       lambda_=0.99,
       sgd_minibatch_size=min(10000, train_batch_size),
       num_sgd_iter=12,
@@ -269,7 +269,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   elif args.substrate == "externality_mushrooms__dense":
     config = config.training(
       gamma=0.999,
-      lr = 1.1e-4,
+      lr=1.1e-4,
       lambda_=1.0,
       sgd_minibatch_size=min(7500, train_batch_size),
       num_sgd_iter=14,
@@ -280,7 +280,7 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   elif args.substrate == "territory__inside_out":
     config = config.training(
       gamma=0.999,
-      lr = 2.4e-4,
+      lr=2.4e-4,
       lambda_=0.99,
       sgd_minibatch_size=min(5000, train_batch_size),
       num_sgd_iter=12,
@@ -289,10 +289,9 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
       vf_clip_param=2,
   )
   elif "clean_up" in args.substrate:
-    # TODO actually tune
     config = config.training(
       gamma=0.99,
-      lr = 1e-4,
+      lr=1e-4,
       lambda_=0.95,
       sgd_minibatch_size=min(12500, train_batch_size),
       num_sgd_iter=14,
@@ -482,7 +481,7 @@ def create_lr_and_policies(
   if args.substrate == "commons_harvest__open":
     lr = 7e-5
   elif args.substrate == "externality_mushrooms__dense":
-    lr = 1.1e-4,
+    lr = 1.1e-4
   elif args.substrate == "territory__inside_out":
     lr = 2.4e-4
   elif "clean_up" in args.substrate:
