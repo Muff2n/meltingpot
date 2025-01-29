@@ -23,6 +23,7 @@ __pycache__/
 
 # Type checking
 .pytype
+*flycheck_*
 
 # Saved models.
 /examples/results/
@@ -32,5 +33,5 @@ __pycache__/
 
 .virtual_documents
 callbacks.log
-*png
-*jpeg
+*.png
+*.svg

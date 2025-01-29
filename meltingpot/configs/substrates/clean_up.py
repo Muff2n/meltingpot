@@ -52,6 +52,8 @@ PrefabConfig = game_object_utils.PrefabConfig
 # Warning: setting `_ENABLE_DEBUG_OBSERVATIONS = True` may cause slowdown.
 _ENABLE_DEBUG_OBSERVATIONS = False
 
+SPRITE_SIZE = 1
+
 ASCII_MAP = """
 WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
 WHFFFHFFHFHFHFHFHFHFHHFHFFFHFW
@@ -445,6 +447,7 @@ def create_dirt_prefab(initial_state):
               "kwargs": {
                   "activeState": "dirt",
                   "inactiveState": "dirtWait",
+                  "cap": True,
               }
           },
           {
@@ -598,18 +601,19 @@ def create_scene():
               "kwargs": {},
           },
           {
-              "component": "DirtSpawner",
+              "component": "DirtSpawnerCapped",
               "kwargs": {
                   "dirtSpawnProbability": 0.5,
                   "delayStartOfDirtSpawning": 50,
+                  "threshold": 1.0,  # will be set dynamically
               },
           },
           {
               "component": "StochasticIntervalEpisodeEnding",
               "kwargs": {
-                  "minimumFramesPerEpisode": 1000,
+                  "minimumFramesPerEpisode": 2000,
                   "intervalLength": 100,  # Set equal to unroll length.
-                  "probabilityTerminationPerInterval": 0.2
+                  "probabilityTerminationPerInterval": 1.0
               }
           },
           {
@@ -828,7 +832,7 @@ def get_config():
       # Global switching signals for puppeteers.
       "NUM_OTHERS_WHO_CLEANED_THIS_STEP": specs.float64(),
       # Debug only (do not use the following observations in policies).
-      "WORLD.RGB": specs.rgb(168, 240),
+      "WORLD.RGB": specs.rgb(21 * SPRITE_SIZE, 30 * SPRITE_SIZE),
   })
 
   # The roles assigned to each player.
@@ -843,6 +847,7 @@ def build(
     config: config_dict.ConfigDict,
 ) -> Mapping[str, Any]:
   """Build the clean_up substrate given roles."""
+  default_num_players = len(config.default_player_roles)
   del config
   num_players = len(roles)
   # Build the rest of the substrate definition.
@@ -851,8 +856,8 @@ def build(
       levelDirectory="meltingpot/lua/levels",
       numPlayers=num_players,
       # Define upper bound of episode length since episodes end stochastically.
-      maxEpisodeLengthFrames=5000,
-      spriteSize=8,
+      maxEpisodeLengthFrames=2000,
+      spriteSize=SPRITE_SIZE,
       topology="BOUNDED",  # Choose from ["BOUNDED", "TORUS"],
       simulation={
           "map": ASCII_MAP,
@@ -862,4 +867,20 @@ def build(
           "charPrefabMap": CHAR_PREFAB_MAP,
       },
     )
+
+  scene = substrate_definition["simulation"]["scene"]
+  prefabs = substrate_definition["simulation"]["prefabs"]
+
+  def get_component(components: list[dict[str, str]], name: str):
+    for item in components:
+      if item["component"] == name:
+        return item
+
+  item = get_component(prefabs["potential_apple"]["components"], "AppleGrow")
+  item["kwargs"]["maxAppleGrowthRate"] *= (num_players / default_num_players)
+
+  item = get_component(scene["components"], "DirtSpawnerCapped")
+  item["kwargs"]["dirtSpawnProbability"] *= (num_players / default_num_players)
+  item["kwargs"]["threshold"] = 0.37 + 0.63 * (num_players / default_num_players)
+
   return substrate_definition

@@ -1,16 +1,15 @@
 """Run experiments"""
 
 import argparse
-from collections import defaultdict
 import importlib
 import json
-import numpy as np
 import os
-import pandas as pd
-from typing import Any, Tuple, Dict, List, Mapping, Callable, Sequence, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from meltingpot import substrate
 from ml_collections.config_dict import ConfigDict
+import numpy as np
+import pandas as pd
 import ray
 from ray import tune
 from ray.air import CheckpointConfig
@@ -20,12 +19,13 @@ from ray.rllib.policy.policy import PolicySpec
 from ray.tune.experiment import Trial
 from ray.tune.registry import register_env
 from ray.tune.schedulers import ASHAScheduler
+from ray.tune.search import Repeater
 from ray.tune.search.optuna import OptunaSearch
 
 from examples.rllib import utils
 from reward_transfer.callbacks import LoadPolicyCallback, SaveResultsCallback
 
-LOGGING_LEVEL = "WARN"
+LOGGING_LEVEL = "INFO"
 VERBOSE = 0  # 0: silent, 1: status
 
 
@@ -66,7 +66,12 @@ def parse_arguments() -> argparse.Namespace:
       "--rollout_workers",
       type=int,
       required=True,
-      help="Number of rollout workers, should be in [0, num_cpus]")
+      help="Number of rollout workers")
+  parser.add_argument(
+      "--main_process_cpus",
+      type=int,
+      default=1,
+      help="Number of main process workers")
   parser.add_argument(
       "--envs_per_worker",
       type=int,
@@ -96,6 +101,11 @@ def parse_arguments() -> argparse.Namespace:
       type=int,
       default=100,
       help="Number of samples to run for hyperparameter optimisation")
+  parser_optimise.add_argument(
+      "--repeat",
+      type=int,
+      default=4,
+      help="Number of times to repeat a sample to smooth the variance")
 
   parser_pretraining = subparsers.add_parser(
       "pre-training", help="Pre-train a policy")
@@ -103,7 +113,12 @@ def parse_arguments() -> argparse.Namespace:
       "--trial_id",
       type=str,
       default=None,
-      help="Trial id to resume training from (if we had an error)")
+      help="Trial id to resume training from, using the last checkpoint")
+  parser_pretraining.add_argument(
+      "--player_1_checkpoint",
+      type=str,
+      default=None,
+      help="Policy checkpoint to start the initial policy from")
   parser_pretraining.add_argument(
       "--training_mode",
       type=str,
@@ -126,16 +141,28 @@ def parse_arguments() -> argparse.Namespace:
       choices=["independent", "self-play"],
       required=True,
       help="self-play enables parameter sharing")
+  parser_training.add_argument(
+      "--num_to_run", type=int, default=None, help="Number of self-interests to run (for splitting long runs)")
 
   parser_scratch = subparsers.add_parser(
       "scratch", help="Validate from scratch")
+  parser_scratch.add_argument(
+      "--trial_id",
+      type=str,
+      default=None,
+      help="Trial id to use")
+  parser_scratch.add_argument(
+      "--scratch_checkpoint",
+      type=str,
+      default=None,
+      help="Policy checkpoint to start the initial policy from")
   parser_scratch.add_argument(
       "--num_players", type=int, required=True, help="Number of players")
   parser_scratch.add_argument(
       "--self_interest",
       type=float,
       required=True,
-      help="Self-interest level (resuming crashed training)")
+      help="Self-interest level")
   parser_scratch.add_argument(
       "--num_seeds",
       type=int,
@@ -163,6 +190,13 @@ def setup_environment(
   substrate_definition = env_module.build(substrate_config.default_player_roles,
                                           substrate_config)
 
+  horizon = substrate_definition["maxEpisodeLengthFrames"]
+  min_frames = None
+  for component in substrate_definition["simulation"]["scene"]["components"]:
+    if component["component"] == "StochasticIntervalEpisodeEnding":
+      min_frames = component["kwargs"]["minimumFramesPerEpisode"]
+  assert horizon == min_frames, f"frames mismatch: {horizon}, {min_frames}"
+
   env_config = ConfigDict({
       "substrate": args.substrate,
       "substrate_config": substrate_config,
@@ -170,8 +204,7 @@ def setup_environment(
       "scaled": 1
   })
 
-  return env_config, substrate_definition["spriteSize"], substrate_definition[
-      "maxEpisodeLengthFrames"]
+  return env_config, substrate_definition["spriteSize"], horizon
 
 
 def create_model_config(base_env: utils.MeltingPotEnv,
@@ -215,22 +248,67 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
                       train_batch_size: int, policy_mapping_fn: Callable[str,
                                                                          str],
                       env_config: Mapping[str, Any]) -> PPOConfig:
-  return PPOConfig().training(
-      gamma=0.999,
+  assert args.rollout_workers + args.main_process_cpus <= args.num_cpus, f"Not enough CPUs requested for rollout workers and main process CPUs"
+
+  config = PPOConfig().training(
       train_batch_size=train_batch_size,
       model=model,
+      entropy_coeff=1e-3,
+    )
+
+  if args.substrate == "commons_harvest__open":
+    config = config.training(
+      gamma=0.999,
+      lr=7e-5,
       lambda_=0.99,
       sgd_minibatch_size=min(10000, train_batch_size),
       num_sgd_iter=12,
       vf_loss_coeff=0.8,
-      entropy_coeff=1e-3,
       clip_param=0.32,
       vf_clip_param=2,
-  ).env_runners(
+  )
+  elif args.substrate == "externality_mushrooms__dense":
+    config = config.training(
+      gamma=0.999,
+      lr=1.1e-4,
+      lambda_=1.0,
+      sgd_minibatch_size=min(7500, train_batch_size),
+      num_sgd_iter=14,
+      vf_loss_coeff=0.85,
+      clip_param=0.28,
+      vf_clip_param=2,
+  )
+  elif args.substrate == "territory__inside_out":
+    config = config.training(
+      gamma=0.999,
+      lr=2.4e-4,
+      lambda_=0.99,
+      sgd_minibatch_size=min(5000, train_batch_size),
+      num_sgd_iter=12,
+      vf_loss_coeff=0.85,
+      clip_param=0.34,
+      vf_clip_param=2,
+  )
+  elif "clean_up" in args.substrate:
+    config = config.training(
+      gamma=0.99,
+      lr=1e-4,
+      lambda_=0.95,
+      sgd_minibatch_size=min(12500, train_batch_size),
+      num_sgd_iter=14,
+      vf_loss_coeff=0.7,
+      clip_param=0.25,
+      vf_clip_param=2,
+  )
+  else:
+    assert False, f"Unrecognised substrate: {args.substrate}"
+
+  config = config.env_runners(
       num_env_runners=args.rollout_workers,
       num_envs_per_env_runner=args.envs_per_worker,
       rollout_fragment_length=400,
       batch_mode="complete_episodes",
+      sample_timeout_s=600,
   ).environment(
       env_config=env_config,
       env="meltingpot",
@@ -243,12 +321,15 @@ def create_ppo_config(args: argparse.Namespace, model: Mapping[str, Any],
   ).debugging(
       log_level=LOGGING_LEVEL
   ).resources(
+      num_cpus_for_main_process=args.main_process_cpus,
       num_gpus=min(args.num_gpus, 1)
   ).framework(
       framework=args.framework
   ).reporting(
       metrics_num_episodes_for_smoothing=1
   )
+
+  return config
 
 
 def create_tune_callbacks(
@@ -268,26 +349,28 @@ def create_tune_callbacks(
 def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mapping[str, Any]) -> None:
   """Run hyper-parameter optimisation in a single-agent environment for PPO"""
 
-  def custom_trial_name_creator(trial: Trial) -> str:
+  def optimise_trial_name_creator(trial: Trial) -> str:
     """Create a custom name that includes hyperparameters."""
-    attributes = ("sgd_minibatch_size", "num_sgd_iter", "lr", "lambda",
-                  "vf_loss_coeff", "clip_param")
+    attributes = ("gamma", "sgd_minibatch_size", "num_sgd_iter", "lr", "lambda",
+                  "vf_loss_coeff", "clip_param", "vf_clip_param")
     attributes_str = [
         f"{trial.config[a]:.5f}".rstrip("0").rstrip(".") for a in attributes
     ]
-    return f"{trial.trainable_name}_{trial.trial_id}_{','.join(attributes_str)}"
+    return f"{trial.trainable_name}_{trial.trial_id}_{'-'.join(attributes_str)}"
 
   assert config.get(
       "train_batch_size"
   ) >= 10000, f"train_batch_size must be greater than 10000. Suggest increasing --episodes_per_worker"
 
   config = config.training(
-      sgd_minibatch_size=tune.qrandint(5000, 10000, 2500),
-      num_sgd_iter=tune.qrandint(8, 14, 2),
-      lr=tune.qloguniform(5e-5, 3e-4, 1e-5),
-      lambda_=tune.quniform(0.95, 1.0, 0.01),
-      vf_loss_coeff=tune.quniform(0.75, 1, 0.05),
-      clip_param=tune.quniform(0.28, 0.36, 0.02),
+      gamma=tune.quniform(0.9, 0.999, 0.001),
+      sgd_minibatch_size=tune.qrandint(2500, 15000, 2500),
+      num_sgd_iter=tune.qrandint(6, 16, 2),
+      lr=tune.qloguniform(3e-5, 3e-3, 1e-5),
+      lambda_=tune.quniform(0.75, 1.0, 0.05),
+      vf_loss_coeff=tune.quniform(0.2, 1, 0.1),
+      clip_param=tune.quniform(0.1, 0.4, 0.05),
+      vf_clip_param=tune.qrandint(2, 20, 2),
   ).multi_agent(policies={"default": PolicySpec()})
 
   env_config["roles"] = env_config["roles"][:1]
@@ -299,15 +382,23 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
       mode="max",
   )
 
-  scheduler = ASHAScheduler(
-      time_attr="training_iteration",
-      metric="env_runners/episode_reward_mean",
-      mode="max",
-      max_t=args.n_iterations,
-      grace_period=max(1, args.n_iterations // 2),
-      reduction_factor=2,
-      brackets=1,
-  )
+  repeater = Repeater(search_alg, repeat=args.repeat)
+
+  # scheduler = ASHAScheduler(
+  #     time_attr="training_iteration",
+  #     metric="env_runners/episode_reward_mean",
+  #     mode="max",
+  #     max_t=args.n_iterations,
+  #     grace_period=max(1, args.n_iterations // 2),
+  #     reduction_factor=2,
+  #     brackets=1,
+  # )
+
+  checkpoint_config = CheckpointConfig(
+    num_to_keep=1,
+    checkpoint_score_attribute="episode_reward_mean",
+    checkpoint_score_order="max",
+    checkpoint_at_end=True)
 
   tune.run(
       run_or_experiment="PPO",
@@ -316,10 +407,12 @@ def run_optimise(args: argparse.Namespace, config: PPOConfig, env_config: Mappin
       config=config,
       num_samples=args.num_samples,
       storage_path=args.local_dir,
-      search_alg=search_alg,
-      scheduler=scheduler,
+      # search_alg=search_alg,
+      # scheduler=scheduler,
+      search_alg=repeater,
+      checkpoint_config=checkpoint_config,
       verbose=VERBOSE,
-      trial_name_creator=custom_trial_name_creator,
+      trial_name_creator=optimise_trial_name_creator,
       log_to_file=False,
       callbacks=create_tune_callbacks(args),
       max_concurrent_trials=args.max_concurrent_trials,
@@ -359,7 +452,7 @@ def setup_logging_utils(
           [SaveResultsCallback, LoadPolicyCallback]))
 
   trial_id = args.trial_id if hasattr(
-      args, 'trial_id') and args.trial_id is not None else Trial.generate_id()
+      args, "trial_id") and args.trial_id is not None else Trial.generate_id()
   config["trial_id"] = trial_id
   name = os.path.join(args.substrate, trial_id)
   working_folder = os.path.join(args.local_dir, name)
@@ -386,11 +479,21 @@ def create_lr_and_policies(
       - Learning rate (float)
       - Dictionary of policies (Dict[str, PolicySpec])
   """
-  if args.training_mode == "independent":
+  if args.substrate == "commons_harvest__open":
     lr = 7e-5
+  elif args.substrate == "externality_mushrooms__dense":
+    lr = 1.1e-4
+  elif args.substrate == "territory__inside_out":
+    lr = 2.4e-4
+  elif "clean_up" in args.substrate:
+    lr = 1e-4
+  else:
+    assert False, f"Unrecognised substrate: {args.substrate}"
+
+  if args.training_mode == "independent":
     policies = {aid: PolicySpec() for aid in ordered_agent_ids[:num_players]}
   else:  # self-play
-    lr = 7e-5 / num_players
+    lr = lr / num_players
     policies = {"default": PolicySpec()}
 
   return lr, policies
@@ -433,9 +536,13 @@ def run_pretraining(args: argparse.Namespace, config: PPOConfig,
     with open(checkpoints_log_filepath, mode="r", encoding="utf8") as f:
       info = json.loads(f.readlines()[-1])
       if info["self-interest"] != 1:
-        env_config["self-interest"] = info["self_interest"]
+        env_config["self-interest"] = round(info["self_interest"], 3)
       start_n += info["num_players"]
       config["policy_checkpoint"] = info["policy_checkpoint"]
+  # otherwise, we can initially start from another checkpoint, for example in
+  # cleanup, the best optimisation policy
+  elif args.player_1_checkpoint:
+    config["policy_checkpoint"] = args.player_1_checkpoint
 
   default_player_roles = env_config["substrate_config"]["default_player_roles"]
   for n in range(start_n, len(default_player_roles) + 1):
@@ -506,8 +613,12 @@ def run_training(args: argparse.Namespace, config: PPOConfig,
   ratio = [20, 10, 5, 3, 5 / 2, 2, 5 / 3, 4 / 3, 1]
   # If we are resuming
   n_completed = len(df[condition]["self-interest"])
-  for s in [r / (n + r - 1) for r in ratio[(n_completed - 1):]]:
-    env_config["self-interest"] = s
+  if args.num_to_run:
+    run_until = min(n_completed + args.num_to_run - 1, len(ratio))
+  else:
+    run_until = len(ratio)
+  for s in [r / (n + r - 1) for r in ratio[(n_completed - 1):run_until]]:
+    env_config["self-interest"] = round(s, 3)
 
     config = config.environment(env_config=env_config)
 
@@ -556,28 +667,49 @@ def run_scratch(args: argparse.Namespace, config: ConfigDict,
 
   lr, policies = create_lr_and_policies(args, n, ordered_agent_ids)
 
-  env_config["self-interest"] = args.self_interest
+  env_config["self-interest"] = round(args.self_interest, 3)
 
   config = config.training(lr=lr).multi_agent(
-      policies=policies,).environment(env_config=env_config)
+      policies=policies).environment(env_config=env_config)
 
-  tune.run(
-      run_or_experiment="PPO",
-      name=name,
-      metric="env_runners/episode_reward_mean",
-      mode="max",
-      stop={"training_iteration": args.n_iterations},
-      config=config,
-      storage_path=args.local_dir,
-      checkpoint_config=CheckpointConfig(checkpoint_at_end=True),
-      verbose=VERBOSE,
-      trial_name_creator=custom_trial_name_creator,
-      trial_dirname_creator=custom_trial_name_creator,
-      log_to_file=False,
-      callbacks=create_tune_callbacks(args),
-      max_concurrent_trials=args.max_concurrent_trials,
-      num_samples=args.num_seeds,
-  )
+  for _ in range(args.num_seeds):
+    config["policy_checkpoint"] = args.scratch_checkpoint
+
+    if os.path.exists(checkpoints_log_filepath):
+      df = pd.read_json(checkpoints_log_filepath, lines=True)
+      condition = (df["num_players"] == n) & \
+        (df["training-mode"] == args.training_mode) & \
+        np.isclose(df["self-interest"], env_config["self-interest"], rtol=1e-4)
+
+      n_trial = len(df[condition])
+    else:
+      n_trial = 0
+
+    print(f"n_trial = {n_trial}")
+
+    def monkey_trial_name_creator(trial: Trial) -> str:
+      return custom_trial_name_creator(trial) + f"_{n_trial}"
+
+    experiment = tune.run(
+        run_or_experiment="PPO",
+        name=name,
+        metric="env_runners/episode_reward_mean",
+        mode="max",
+        stop={"training_iteration": args.n_iterations},
+        config=config,
+        storage_path=args.local_dir,
+        checkpoint_config=CheckpointConfig(checkpoint_at_end=True),
+        verbose=VERBOSE,
+        trial_name_creator=monkey_trial_name_creator,
+        trial_dirname_creator=monkey_trial_name_creator,
+        log_to_file=False,
+        callbacks=create_tune_callbacks(args),
+        max_concurrent_trials=args.max_concurrent_trials,
+     )
+
+    policy_checkpoint = experiment.trials[-1].checkpoint.path
+    config["policy_checkpoint"] = policy_checkpoint
+    log_checkpoint_info(config, checkpoints_log_filepath)
 
 
 def main():

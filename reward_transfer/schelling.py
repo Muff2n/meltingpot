@@ -38,12 +38,12 @@ def main():
       "--cooperation_checkpoint",
       type=str,
       required=True,
-      help="If provided, use this checkpoint instead of the last checkpoint")
+      help="Cooperative policies")
   parser.add_argument(
       "--defection_checkpoint",
       type=str,
       required=True,
-      help="If provided, use this checkpoint instead of the last checkpoint")
+      help="Defect policies")
 
   args = parser.parse_args()
 
@@ -63,6 +63,8 @@ def main():
 
   substrate_config = substrate.get_config(config["env_config"]["substrate"])
 
+  # reset attributes
+  config["policy_checkpoint"] = None
   config["env_config"]["self-interest"] = 1
   config["env_config"]["roles"] = substrate_config.default_player_roles
 
@@ -86,8 +88,10 @@ def main():
 
   # load all the defect policies...
   for aid in aids:
-    print(f"Update policy {aid} to defect")
-    ppo.get_policy(aid).set_weights(Policy.from_checkpoint(os.path.join(args.defection_checkpoint, "policies", aid)).get_weights())
+    policy_path = os.path.join(args.defection_checkpoint, "policies", aid)
+    print(f"Update policy {aid} to defect using path {policy_path}")
+    policy = Policy.from_checkpoint(policy_path)
+    ppo.get_policy(aid).set_weights(policy.get_weights())
 
   print("Running evaluate()")
   results = ppo.evaluate()
@@ -100,8 +104,10 @@ def main():
   # sweep over the possible policy pairings
   for aid in aids:
     # load a cooperative policy
-    print(f"Update policy {aid} to cooperate")
-    ppo.get_policy(aid).set_weights(Policy.from_checkpoint(os.path.join(args.cooperation_checkpoint, "policies", aid)).get_weights())
+    policy_path = os.path.join(args.cooperation_checkpoint, "policies", aid)
+    print(f"Update policy {aid} to cooperate using path {policy_path}")
+    policy = Policy.from_checkpoint(policy_path)
+    ppo.get_policy(aid).set_weights(policy.get_weights())
 
     print("Running evaluate()")
     results = ppo.evaluate()
