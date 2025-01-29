@@ -25,13 +25,13 @@ export PYTHONPATH=$(pwd)
 
 ## Reproduce
 
-To run the experiments, first setup the shared information.
+To run the experiments, first setup the shared information. These are the parameters we used, but you will need to choose an appropriate number of CPUs, GPUs and workers for your hardware.
 
 ```shell
 export EXPERIMENT_FLAGS="--wandb <YOUR_PROJECT_NAME> \
   --substrate <SUBSTRATE> \
   --local_dir <RESULT_DIR> \
-  --framework tf2 \
+  --framework tf \
   --num_cpus 16 \
   --num_gpus 1 \
   --rollout_workers 15 \
@@ -42,7 +42,7 @@ export EXPERIMENT_FLAGS="--wandb <YOUR_PROJECT_NAME> \
 To run the optimisation
 ```shell
 python3 reward_transfer/experiments.py $EXPERIMENT_FLAGS \
-  --n_iterations 50 \
+  --n_iterations 150 \
   optimise \
   --num_samples 100
 ```
